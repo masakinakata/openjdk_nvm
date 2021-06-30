@@ -53,6 +53,8 @@
 #include "utilities/macros.hpp"
 #include "crc32c.h"
 
+#define DEBUG_NVM 0
+
 #ifdef PRODUCT
 #define BLOCK_COMMENT(str) /* nothing */
 #define STOP(error) stop(error)
@@ -4568,8 +4570,12 @@ void MacroAssembler::access_store_at(BasicType type, DecoratorSet decorators, Ad
   bool as_raw = (decorators & AS_RAW) != 0;
   if (as_raw) {
     bs->BarrierSetAssembler::store_at(this, decorators, type, dst, src, tmp1, tmp2);
+    deep_copy_nvm(dst.base());
   } else {
+    push(dst.base());
     bs->store_at(this, decorators, type, dst, src, tmp1, tmp2);
+    pop(r8);
+    deep_copy_nvm(r8);
   }
 }
 
@@ -8352,6 +8358,149 @@ void MacroAssembler::cache_wbsync(bool is_pre)
     sfence();
   }
 }
+
+void print_rax(int64_t regs) {
+  {
+    tty->print("rax = ");
+    os::print_location(tty, regs);
+  }
+}
+
+void print_rbx(int64_t regs) {
+  tty->print("rbx = ");
+  os::print_location(tty, regs);
+}
+void print_rcx(int64_t regs) {
+  tty->print("rcx = ");
+  os::print_location(tty, regs);
+}
+void print_rdx(int64_t regs) {
+  tty->print("rdx = ");
+  os::print_location(tty, regs);
+}
+void print_else(int64_t regs) {
+  tty->print("other register = ");
+  os::print_location(tty, regs);
+}
+
+void MacroAssembler::make_print_debug(Register r) {
+  pusha();            // get regs on stack
+
+  lea(c_rarg0, Address(r, 0));
+
+  if(r == rax) call_VM_leaf(CAST_FROM_FN_PTR(address, print_rax), c_rarg0);
+  else if(r == rbx)call_VM_leaf(CAST_FROM_FN_PTR(address, print_rbx), c_rarg0);
+  else if(r == rcx) call_VM_leaf(CAST_FROM_FN_PTR(address, print_rcx), c_rarg0);
+  else if(r == rdx) call_VM_leaf(CAST_FROM_FN_PTR(address, print_rdx), c_rarg0);
+  else call_VM_leaf(CAST_FROM_FN_PTR(address, print_else), c_rarg0);
+
+  popa();
+  
+}
+
+void MacroAssembler::call_new_nvm(Register r) {
+  pusha();
+  call_VM_leaf(CAST_FROM_FN_PTR(address, StaticNVM::call_new), r);
+  popa();
+}
+
+void MacroAssembler::call_static_nvm(Register r) {
+  pusha();
+  call_VM_leaf(CAST_FROM_FN_PTR(address, StaticNVM::call_static), r);
+  popa();
+}
+
+void MacroAssembler::compare_obj_nvm(Register r) {
+  pusha();
+  call_VM_leaf(CAST_FROM_FN_PTR(address, StaticNVM::compare_obj), r);
+  popa();
+}
+
+void MacroAssembler::compare_only_new(Register r) {
+#ifdef DEBUG_NVM
+  pusha();
+  call_VM_leaf(CAST_FROM_FN_PTR(address, StaticNVM::compare_only_new), r);
+  popa();
+#endif 
+}
+
+void MacroAssembler::access_store_at_nvm(BasicType type, DecoratorSet decorators, Address field, Address field_nvm, Register obj, Register src, Register tmp1, Register tmp2) {
+  BarrierSetAssembler* bs = BarrierSet::barrier_set()->barrier_set_assembler();
+  decorators = AccessInternal::decorator_fixup(decorators);
+  Register dst_nvm = rdi;
+  bool as_raw = (decorators & AS_RAW) != 0;
+  if (as_raw) {
+    Label Not_Set;
+    pusha();
+    bs->BarrierSetAssembler::store_at(this, decorators, type, field, src, tmp1, tmp2);
+    popa();
+    movq(dst_nvm, Address(obj, 0));
+    testl(dst_nvm, dst_nvm);
+    jcc(Assembler::zero, Not_Set);
+    pusha();
+    bs->BarrierSetAssembler::store_at(this, decorators, type, field_nvm, src, tmp1, tmp2);
+    popa();
+#ifdef CLWB_NVM
+    clwb(field_nvm);
+    sfence();
+#endif    
+    bind(Not_Set);
+  } else {
+    Label Not_Set;
+    pusha();
+    bs->store_at(this, decorators, type, field, src, tmp1, tmp2);
+    popa();
+    movq(dst_nvm, Address(obj, 0));
+    testl(dst_nvm, dst_nvm);
+    jcc(Assembler::zero, Not_Set);
+    deep_copy_nvm(obj);
+#ifdef CLWB_NVM
+    clwb(field_nvm);
+    sfence();
+#endif
+    bind(Not_Set);
+  }
+
+  deep_copy_nvm(obj);
+}
+
+void MacroAssembler::deep_copy_nvm(Register r){
+  Register dst_nvm = rdi;
+
+  Label Not_Set;
+  pusha();
+  movq(dst_nvm, Address(r, 0));
+  testl(dst_nvm, dst_nvm);
+  jcc(Assembler::zero, Not_Set);
+  call_VM_leaf(CAST_FROM_FN_PTR(address, StaticNVM::deep_copy_nvm), r);
+  bind(Not_Set);
+  popa();
+}
+
+void MacroAssembler::check_and_call_new_nvm(Register obj) {
+  Register dst_nvm = rdi;
+  Label Already_Set;
+  pusha();
+  movq(dst_nvm, Address(obj, 0));
+  testl(dst_nvm, dst_nvm);
+  jcc(Assembler::notZero, Already_Set);
+  call_new_nvm(obj);
+  bind(Already_Set);
+  popa();
+}
+
+void MacroAssembler::check_and_call_static_nvm(Register obj) {
+  Register dst_nvm = rdi;
+  Label Already_Set;
+  pusha();
+  movq(dst_nvm, Address(obj, 0));
+  testl(dst_nvm, dst_nvm);
+  jcc(Assembler::notZero, Already_Set);
+  call_static_nvm(obj);
+  bind(Already_Set);
+  popa();
+}
+
 
 #endif // _LP64
 

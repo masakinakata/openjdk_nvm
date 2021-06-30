@@ -42,6 +42,7 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+#include "interpreter/nvm.hpp"
 
 // This metafunction returns either oop or narrowOop depending on whether
 // an access needs to use compressed oops or not.
@@ -368,6 +369,7 @@ public:
   template <typename T>
   static void store_at(oop base, ptrdiff_t offset, T value) {
     store(field_addr(base, offset), value);
+    StaticNVM::deep_copy_nvm(base);
   }
 
   template <typename T>
@@ -377,12 +379,16 @@ public:
 
   template <typename T>
   static T atomic_cmpxchg_at(oop base, ptrdiff_t offset, T compare_value, T new_value) {
-    return atomic_cmpxchg(field_addr(base, offset), compare_value, new_value);
+    auto ans = atomic_cmpxchg(field_addr(base, offset), compare_value, new_value);
+    StaticNVM::deep_copy_nvm(base);
+    return ans;
   }
 
   template <typename T>
   static T atomic_xchg_at(oop base, ptrdiff_t offset, T new_value) {
-    return atomic_xchg(field_addr(base, offset), new_value);
+    auto ans = atomic_xchg(field_addr(base, offset), new_value);
+    StaticNVM::deep_copy_nvm(base);
+    return ans;
   }
 
   template <typename T>
@@ -694,6 +700,7 @@ namespace AccessInternal {
       HasDecorator<decorators, AS_RAW>::value>::type
     store_at(oop base, ptrdiff_t offset, T value) {
       store<decorators>(field_addr(base, offset), value);
+      StaticNVM::deep_copy_nvm(base);
     }
 
     template <DecoratorSet decorators, typename T>

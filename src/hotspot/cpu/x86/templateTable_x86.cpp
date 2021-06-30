@@ -3067,7 +3067,6 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   // Check for volatile store
   __ testl(rdx, rdx);
   __ jcc(Assembler::zero, notVolatile);
-
   putfield_or_static_helper(byte_no, is_static, rc, obj, off, flags);
   volatile_barrier(Assembler::Membar_mask_bits(Assembler::StoreLoad |
                                                Assembler::StoreStore));
@@ -3085,7 +3084,7 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
   // field addresses
   const Address field(obj, off, Address::times_1, 0*wordSize);
   NOT_LP64( const Address hi(obj, off, Address::times_1, 1*wordSize);)
-
+    
   Label notByte, notBool, notInt, notShort, notChar,
         notLong, notFloat, notObj;
   Label Done;
@@ -3117,7 +3116,9 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
   {
     __ pop(ztos);
     if (!is_static) pop_and_check_object(obj);
+    //__ compare_only_new(obj);
     __ access_store_at(T_BOOLEAN, IN_HEAP, field, rax, noreg, noreg);
+    __ compare_only_new(obj);
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_zputfield, bc, rbx, true, byte_no);
     }
@@ -3133,7 +3134,9 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     __ pop(atos);
     if (!is_static) pop_and_check_object(obj);
     // Store into the field
+    __ compare_only_new(obj);
     do_oop_store(_masm, field, rax);
+    __ compare_only_new(obj);
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_aputfield, bc, rbx, true, byte_no);
     }
@@ -3148,7 +3151,9 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
   {
     __ pop(itos);
     if (!is_static) pop_and_check_object(obj);
+    //__ compare_only_new(obj);
     __ access_store_at(T_INT, IN_HEAP, field, rax, noreg, noreg);
+    __ compare_only_new(obj);
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_iputfield, bc, rbx, true, byte_no);
     }
@@ -3163,7 +3168,9 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
   {
     __ pop(ctos);
     if (!is_static) pop_and_check_object(obj);
+    //__ compare_only_new(obj);
     __ access_store_at(T_CHAR, IN_HEAP, field, rax, noreg, noreg);
+    __ compare_only_new(obj);
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_cputfield, bc, rbx, true, byte_no);
     }
@@ -3178,7 +3185,9 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
   {
     __ pop(stos);
     if (!is_static) pop_and_check_object(obj);
+    //__ compare_only_new(obj);
     __ access_store_at(T_SHORT, IN_HEAP, field, rax, noreg, noreg);
+    __ compare_only_new(obj);
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_sputfield, bc, rbx, true, byte_no);
     }
@@ -3194,7 +3203,9 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     __ pop(ltos);
     if (!is_static) pop_and_check_object(obj);
     // MO_RELAXED: generate atomic store for the case of volatile field (important for x86_32)
+    //__ compare_only_new(obj);
     __ access_store_at(T_LONG, IN_HEAP | MO_RELAXED, field, noreg /* ltos*/, noreg, noreg);
+    __ compare_only_new(obj);
 #ifdef _LP64
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_lputfield, bc, rbx, true, byte_no);
@@ -3212,6 +3223,7 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     __ pop(ftos);
     if (!is_static) pop_and_check_object(obj);
     __ access_store_at(T_FLOAT, IN_HEAP, field, noreg /* ftos */, noreg, noreg);
+    __ compare_only_new(obj);
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_fputfield, bc, rbx, true, byte_no);
     }
@@ -3230,6 +3242,7 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     __ pop(dtos);
     if (!is_static) pop_and_check_object(obj);
     // MO_RELAXED: for the case of volatile field, in fact it adds no extra work for the underlying implementation
+    //__ compare_only_new(obj);
     __ access_store_at(T_DOUBLE, IN_HEAP | MO_RELAXED, field, noreg /* dtos */, noreg, noreg);
     if (!is_static && rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_dputfield, bc, rbx, true, byte_no);
@@ -3973,6 +3986,9 @@ void TemplateTable::_new() {
 
   if (UseTLAB) {
     __ tlab_allocate(thread, rax, rdx, 0, rcx, rbx, slow_case);
+    __ pusha();
+    __ call_VM_leaf(CAST_FROM_FN_PTR(address, StaticNVM::debug_make_nvm_space), rdx, rax);
+    __ popa();
     if (ZeroTLAB) {
       // the fields have been already cleared
       __ jmp(initialize_header);
@@ -4060,6 +4076,7 @@ void TemplateTable::_new() {
 
   // continue
   __ bind(done);
+  __ deep_copy_nvm(rax);
 }
 
 void TemplateTable::newarray() {

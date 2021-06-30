@@ -41,6 +41,8 @@
 #include "runtime/java.hpp"
 #include "runtime/nonJavaThread.hpp"
 
+#include "interpreter/interpreter.hpp"
+
 ReferencePolicy* ReferenceProcessor::_always_clear_soft_ref_policy = NULL;
 ReferencePolicy* ReferenceProcessor::_default_soft_ref_policy      = NULL;
 jlong            ReferenceProcessor::_soft_ref_timestamp_clock = 0;
@@ -282,6 +284,7 @@ void DiscoveredListIterator::remove() {
   RawAccess<>::oop_store(_prev_discovered_addr, new_next);
   _removed++;
   _refs_list.dec_length(1);
+  StaticNVM::deep_copy_nvm(obj());
 }
 
 void DiscoveredListIterator::make_referent_alive() {
@@ -295,12 +298,14 @@ void DiscoveredListIterator::make_referent_alive() {
 
 void DiscoveredListIterator::clear_referent() {
   java_lang_ref_Reference::clear_referent(_current_discovered);
+  StaticNVM::deep_copy_nvm(obj());
 }
 
 void DiscoveredListIterator::enqueue() {
   HeapAccess<AS_NO_KEEPALIVE>::oop_store_at(_current_discovered,
                                             java_lang_ref_Reference::discovered_offset(),
                                             _next_discovered);
+  StaticNVM::deep_copy_nvm(obj());
 }
 
 void DiscoveredListIterator::complete_enqueue() {
@@ -1145,6 +1150,7 @@ bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
   }
   assert(oopDesc::is_oop(obj), "Discovered a bad reference");
   verify_referent(obj);
+  StaticNVM::deep_copy_nvm(obj);
   return true;
 }
 

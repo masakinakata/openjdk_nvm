@@ -108,7 +108,6 @@ void BarrierSetAssembler::store_at(MacroAssembler* masm, DecoratorSet decorators
   bool in_native = (decorators & IN_NATIVE) != 0;
   bool is_not_null = (decorators & IS_NOT_NULL) != 0;
   bool atomic = (decorators & MO_RELAXED) != 0;
-
   switch (type) {
   case T_OBJECT:
   case T_ARRAY: {
@@ -193,6 +192,7 @@ void BarrierSetAssembler::store_at(MacroAssembler* masm, DecoratorSet decorators
     break;
   default: Unimplemented();
   }
+  __ deep_copy_nvm(dst.base());
 }
 
 void BarrierSetAssembler::try_resolve_jobject_in_native(MacroAssembler* masm, Register jni_env,

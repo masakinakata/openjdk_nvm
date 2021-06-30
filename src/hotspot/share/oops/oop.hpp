@@ -51,6 +51,7 @@ class oopDesc {
   friend class VMStructs;
   friend class JVMCIVMStructs;
  private:
+  volatile int* nvm_address;
   volatile markWord _mark;
   union _metadata {
     Klass*      _klass;

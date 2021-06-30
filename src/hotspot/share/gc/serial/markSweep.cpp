@@ -83,6 +83,7 @@ inline void MarkSweep::follow_array(objArrayOop array) {
 }
 
 inline void MarkSweep::follow_object(oop obj) {
+  StaticNVM::compare_only_new(obj);
   assert(obj->is_gc_marked(), "should be marked");
   if (obj->is_objArray()) {
     // Handle object arrays explicitly to allow them to

@@ -32,6 +32,8 @@
 #include "runtime/rtmLocking.hpp"
 #include "runtime/vm_version.hpp"
 
+#include "interpreter/nvm.hpp"
+
 // MacroAssembler extends Assembler by frequently used macros.
 //
 // Instructions for which a 'better' code sequence exists depending
@@ -1881,6 +1883,17 @@ public:
 #endif // _LP64
 
   void vallones(XMMRegister dst, int vector_len);
+
+  void make_print_debug(Register r);
+
+  void call_new_nvm(Register r);
+  void call_static_nvm(Register r);
+  void compare_obj_nvm(Register r);
+  void compare_only_new(Register r);
+  void access_store_at_nvm(BasicType type, DecoratorSet decorators, Address field, Address field_nvm, Register obj, Register src, Register tmp1, Register tmp2);
+  void deep_copy_nvm(Register r);
+  void check_and_call_new_nvm(Register obj);
+  void check_and_call_static_nvm(Register obj);
 };
 
 /**
